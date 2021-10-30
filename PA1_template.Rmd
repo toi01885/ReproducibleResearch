@@ -1,0 +1,188 @@
+---
+title: "PA1_template.Rmd"
+author: "Sean"
+date: "2 October 2021"
+output: html_document
+keep_md: yes
+github_document: default
+---
+
+```{r library, echo=FALSE,results='hide',warning=FALSE, message=FALSE}
+library(ggplot2)
+library(dplyr)
+library(yaml)
+library(knitr)
+library(rmarkdown)
+```
+
+## Activity monitoring assignment
+
+This assignment is part of the Johns Hopkins Coursera module on Reproducible Research
+
+## Loading and preprocessing the data
+
+The variables included in this data set are:
+
+* **steps**: Number of steps taking in a 5-minute interval (missing
+    values are coded as `NA`)
+
+* **date**: The date on which the measurement was taken in YYYY-MM-DD
+    format
+
+* **interval**: Identifier for the 5-minute interval in which
+    measurement was taken
+
+The data set is stored in a comma-separated-value (CSV) file and there
+are a total of 17,568 observations in this
+data set.
+
+Load and check the data:
+```{r}
+setwd("C:/Users/User/Documents")
+
+download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip","C:/Users/User/Documents/dataset.zip")
+
+if (!file.exists("activity.csv")){
+  unzip("dataset.zip")
+}
+
+data <- read.csv("activity.csv", na.strings = "NA", colClasses = c("integer", "character", "integer"))
+data$date <- as.Date(data$date, format="%Y-%m-%d")
+
+View(data)
+str(data)
+summary(data)
+head(data)
+```
+
+## What is mean total number of steps taken per day?
+*For this part of the assignment, you can ignore the missing values in the data set.*
+
+Summarizing the data:
+```{r}
+total_steps <- data %>% group_by(date) %>%
+  summarise(total = sum(steps, na.rm = TRUE))
+```
+```{r}
+g <- ggplot(total_steps, aes(total))
+g <- g + geom_histogram(binwidth = 2000)
+g <- g + labs(title="Number of steps per day", y="Frequency", x="Bin")
+g
+```
+
+```{r}
+mean <- mean(total_steps$total, na.rm = TRUE)
+mean
+```
+The mean total number of steps per day is: **`r format(mean, nsmall=2)`**
+
+```{r}
+median <- median(total_steps$total, na.rm = TRUE)
+median
+```
+The median total number of steps per day is: **`r median`**
+
+## What is the average daily activity pattern?
+
+Summarizing the data:
+```{r}
+steps_interval <- data %>% group_by(interval) %>%
+  summarise(mean = mean(steps, na.rm = TRUE))
+```
+
+```{r}
+g <- ggplot(steps_interval, aes(interval, mean))
+g <- g + geom_line()
+g <- g + labs(title="Average steps per interval", y="Average steps", x="Interval")
+g
+```
+
+```{r}
+ix <- which.max(steps_interval$mean)
+interval <- steps_interval[[ix, "interval"]]
+val <- steps_interval[[ix, "mean"]]
+```
+
+The interval with max mean number of steps is **`r interval`** with a mean number of steps of **`r format(val, digit=2, nsmall = 2)`**.
+```{r}
+h <- floor(interval/60)
+m <- interval%%60
+```
+
+Supposing the interval starts at 00:00 of each day, this interval corresponds to **`r paste(h,m, sep=":")`**.
+
+## Imputing missing values
+
+Total number of missing values:
+```{r}
+apply(is.na(data), 2, sum)
+```
+
+We will fill in the missing steps values with the mean for the specific day and interval.
+
+First we compute the mean for each interval and day of the week.
+```{r}
+data <- data %>% mutate(weekday = as.factor(as.POSIXlt(date)$wday))
+fill_val <- data %>% group_by(weekday, interval) %>%
+  summarise(mean = mean(steps, na.rm = TRUE))
+```
+
+Imputing missing data.
+```{r}
+data_nna <- data
+for (row in 1:nrow(data_nna)) {
+  if(is.na(data_nna[row, "steps"])) {
+    wd <- data_nna[row, "weekday"]
+    interval <- data[row, "interval"]
+    data_nna[row, "steps"] <- fill_val[fill_val$weekday==wd & fill_val$interval==interval, "mean"]
+  }
+}
+apply(is.na(data_nna), 2, sum)
+```
+
+Repeating first steps of the assignment now with the imputed data.
+Summarizing the data:
+```{r}
+total_steps_nna <- data_nna %>% group_by(date) %>%
+  summarise(total = sum(steps))
+```
+```{r}
+g <- ggplot(total_steps_nna, aes(total))
+g <- g + geom_histogram(binwidth = 2000)
+g <- g + labs(title="Number of steps per day", y="Frequency", x="Bin")
+g
+```
+
+```{r}
+mean_nna <- mean(total_steps_nna$total)
+mean_nna
+```
+The mean total number of steps per day is: **`r format(mean_nna, nsmall=2)`** (was `r format(mean, nsmall=2)` before imputation).
+
+```{r}
+median_nna <- median(total_steps_nna$total)
+median_nna
+```
+The median total number of steps per day is: **`r format(median_nna, nsmall=2)`** (was `r format(median, nsmall=2)` before imputation).
+
+## Are there differences in activity patterns between weekdays and weekends?
+
+Summarizing the data:
+```{r}
+steps_interval_nna <- data_nna %>% mutate(week.part = if_else(weekday %in% c(1,6), "Weekend", "Weekdays")) %>%
+  group_by(week.part,interval) %>%
+  summarise(mean = mean(steps, na.rm = TRUE))
+```
+
+
+```{r}
+g <- ggplot(steps_interval_nna, aes(interval, mean, col=week.part))
+g <- g + geom_line()
+g <- g + facet_grid(rows = vars(week.part))
+g <- g + labs(title="Average steps per interval between weekdays and week", y="Average steps", x="Interval")
+g
+```
+
+
+## Acknowledgement
+Acknowledgement:  Baptiste Maingret for original solution
